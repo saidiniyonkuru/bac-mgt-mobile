@@ -1,0 +1,37 @@
+# Builds the installable APK on GitHub's servers (Actions tab → latest run → "BAC-MGT-apk").
+# Repository secrets needed: SUPABASE_URL, SUPABASE_ANON_KEY, KEYSTORE_BASE64, KEYSTORE_PASSWORD
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm install --no-audit --no-fund
+      - name: App config and signing key
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          printf "export const SUPABASE_URL = '%s';\nexport const SUPABASE_ANON_KEY = '%s';\n" "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > src/config.ts
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/bac-mgt-release.keystore
+          printf "storeFile=bac-mgt-release.keystore\nkeyAlias=bac-mgt\nstorePassword=%s\nkeyPassword=%s\n" "$KEYSTORE_PASSWORD" "$KEYSTORE_PASSWORD" > android/keystore.properties
+      - run: cd android && chmod +x gradlew && ./gradlew assembleRelease --console=plain
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BAC-MGT-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
